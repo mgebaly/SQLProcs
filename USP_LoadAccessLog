@@ -1,0 +1,36 @@
+USE [AccessLogs]
+GO
+/****** Object:  StoredProcedure [dbo].[USP_LoadAccessLogs]    Script Date: 3/12/2015 12:28:42 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER proc [dbo].[USP_LoadAccessLogs]
+            @LogsXML varchar(max)
+as
+begin tran
+DECLARE @intDocHandle int
+EXEC sp_xml_preparedocument @intDocHandle OUTPUT, @LogsXML
+
+delete Logs  
+
+insert Logs(UserId,LogDate)
+select UserId,LogDate
+from OPENXML(@intDocHandle,'/DocumentElement/Logs', 2)
+with
+(
+ UserId int,
+ LogDate datetime
+)
+EXEC sp_xml_removedocument @intDocHandle
+
+
+if @@error <>0
+begin
+rollback tran 
+return
+end
+else
+begin
+commit tran
+end
