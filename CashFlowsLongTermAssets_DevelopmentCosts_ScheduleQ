@@ -1,0 +1,65 @@
+USE [REDFS]
+GO
+/****** Object:  StoredProcedure [dbo].[CashFlowsLongTermAssets_DevelopmentCosts_ScheduleQ]    Script Date: 3/12/2015 1:20:27 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER proc [dbo].[CashFlowsLongTermAssets_DevelopmentCosts_ScheduleQ]
+            @PlanningScenarioId int
+as
+begin tran
+
+declare @PlanningStartDate datetime,@MarketingandSalesEndDate datetime
+declare @StartYear int,@EndYear int
+declare @Quarters table([Q] int)
+declare @ScenarioQuarters table([Year] int,[Q] int)
+
+insert @Quarters values(1)
+insert @Quarters values(2)
+insert @Quarters values(3)
+insert @Quarters values(4)
+
+select @PlanningStartDate = PlanningStartDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+select @MarketingandSalesEndDate = MarketingandSalesEndDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+
+select @StartYear = year(@PlanningStartDate)
+select @EndYear = year(@MarketingandSalesEndDate)
+
+;with CTE_ScenarioYears
+as
+(
+  select @StartYear ScenarioDate
+  union all
+  select ScenarioDate + 1
+  from CTE_ScenarioYears
+  where ScenarioDate + 1 <= @EndYear
+)
+insert @ScenarioQuarters select ScenarioDate [Year],[Q] from CTE_ScenarioYears,@Quarters
+option (maxrecursion 0)
+
+;with CTE_LTA as
+(
+select CashFlowsLongTermAssetsId,PlanningScenarioId,[Definition],year(DateRecorded) [Year],DATEPART(QUARTER,DateRecorded) [Quarter],DevelopmentCosts,
+dbo.UDF_GetScenarioPeriod(PlanningScenarioId,year(DateRecorded)) Years
+from CashFlowsLongTermAssets
+where PlanningScenarioId = @PlanningScenarioId and DevelopmentCosts <> 0 and IsDeleted = 0
+)
+
+select * from CTE_LTA
+union
+select null,null,null,q.[Year],q.[Q],null,
+dbo.UDF_GetScenarioPeriod(@PlanningScenarioId,q.[Year]) Years
+from @ScenarioQuarters q
+where STR(q.[Year])+STR(q.[Q]) not in(select STR([Year])+STR([Quarter]) from CTE_LTA)
+
+
+if @@error <>0
+begin
+rollback tran 
+return
+end
+else
+begin
+commit tran
+end
