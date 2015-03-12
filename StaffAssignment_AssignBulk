@@ -1,0 +1,42 @@
+USE [AMS]
+GO
+/****** Object:  StoredProcedure [dbo].[StaffAssignment_AssignBulk]    Script Date: 3/12/2015 12:59:01 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER proc [dbo].[StaffAssignment_AssignBulk]
+            @CompoundID int,
+            @CheckInDate datetime,
+            @AssignBulkXML nvarchar(max),
+            @UserID int
+as
+begin tran
+
+declare @StaffAssignment table(StaffID int,
+                               P_RoomID int,
+                               R_RoomID int)
+DECLARE @intDocHandle int
+EXEC sp_xml_preparedocument @intDocHandle OUTPUT, @AssignBulkXML
+insert @StaffAssignment(StaffID,P_RoomID,R_RoomID)
+select * from OPENXML(@intDocHandle,'/DocumentElement/StaffAssignment', 2)
+with(StaffID int,
+     P_RoomID int,
+     R_RoomID int)
+EXEC sp_xml_removedocument @intDocHandle
+
+insert StaffAssignment(StaffID,CompoundID,P_RoomID,R_RoomID,CheckInDate,IsLeft,LeaveDate,LeaveTypeID,Notes,
+                       CreatedDate,Updateddate,CreatedBy,UpdatedBy,IsDeleted)
+                select StaffID,@CompoundID,P_RoomID,R_RoomID,@CheckInDate,0,null,null,null,
+                       getdate(),getdate(),@UserID,@UserID,0
+                       from @StaffAssignment
+
+if @@error <>0
+begin
+rollback tran 
+return
+end
+else
+begin
+commit tran
+end
