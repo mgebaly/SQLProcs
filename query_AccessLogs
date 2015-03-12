@@ -1,0 +1,8 @@
+SELECT  [UserId]
+      ,[LogDate]
+  FROM [AccessLogs].[dbo].[Logs]
+ order by [LogDate] desc
+ 
+ select [UserId],[LogDate],dbo.UDF_GetWorkingHours(UserId,LogDate)
+ from [Logs]
+ where [UserId] = 124 and convert(varchar(10),LogDate,103) = '26/02/2014'  
