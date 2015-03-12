@@ -1,0 +1,23 @@
+USE [REDFS]
+GO
+/****** Object:  UserDefinedFunction [dbo].[UDF_GetPhaseName]    Script Date: 3/12/2015 1:07:24 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER function [dbo].[UDF_GetPhaseName]
+               (@PlanningScenarioId int,
+                @ConstPhaseId int)
+                returns nvarchar(50)
+as
+begin
+declare @PhaseName nvarchar(50)
+
+;with CTE_Phases as
+(select ConstPhaseId,PlanningScenarioId,'Phase '+ cast(row_number() over(order by PhaseStartDate) as varchar(50)) PhaseName
+from ConstructionPhase
+where PlanningScenarioId = @PlanningScenarioId and IsDeleted = 0)
+
+select @PhaseName = PhaseName from CTE_Phases where ConstPhaseId = @ConstPhaseId
+return @PhaseName
+end
