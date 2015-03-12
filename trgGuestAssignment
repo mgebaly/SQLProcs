@@ -1,0 +1,125 @@
+USE [AMS]
+GO
+/****** Object:  Trigger [dbo].[trgGuestAssignment]    Script Date: 3/12/2015 12:50:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER trigger [dbo].[trgGuestAssignment] on [dbo].[GuestAssignment]
+for insert,update
+as
+begin tran 
+
+declare @ContractDetailsID int
+declare @P_RoomID int
+declare @R_RoomID int
+declare @CreatedBy int
+declare @UpdatedBy int
+declare AssignCursor cursor for select ContractDetailsID,P_RoomID,R_RoomID,CreatedBy,UpdatedBy from inserted 
+open AssignCursor
+fetch next from AssignCursor into @ContractDetailsID,@P_RoomID,@R_RoomID,@CreatedBy,@UpdatedBy
+while @@FETCH_STATUS = 0 
+begin
+  declare @GuestPerRoom int
+  declare @GuestCount int
+  declare @IsFull bit
+  declare @GuestID int
+  declare @NationalityID int
+
+  select @GuestPerRoom = GuestPerRoom from ContractDetail
+                       where ContractDetailsID = @ContractDetailsID
+  if (@P_RoomID is not null)   -----permanent rooms
+  begin
+    select @GuestCount = isnull(count(GuestAssignmentID),0)from GuestAssignment
+                         where P_RoomID = @P_RoomID and ContractDetailsID = @ContractDetailsID and IsLeft = 0 and IsDeleted = 0
+
+    select @IsFull = 0
+    if (@GuestPerRoom = @GuestCount)
+    begin
+      select @IsFull = 1
+    end
+
+    if not exists(select P_RoomAssignmentStatusID from P_RoomAssignmentStatus where P_RoomID = @P_RoomID and IsDeleted = 0)
+    begin
+      select @GuestID = i.GuestID from inserted i
+      select @NationalityID = NationalityID from Guest
+                              where GuestID = @GuestID
+      insert P_RoomAssignmentStatus(P_RoomID,ContractDetailsID,NationalityID,ResidentCount,IsFull,IsStaff,CreatedDate,Updateddate,CreatedBy,UpdatedBy,IsDeleted)
+	    					 values(@P_RoomID,@ContractDetailsID,@NationalityID,1,@IsFull,0,getdate(),getdate(),@CreatedBy,@UpdatedBy,0)
+    end
+    else
+    begin
+      declare @P_RoomAssignmentStatusID int
+      select @P_RoomAssignmentStatusID = P_RoomAssignmentStatusID from P_RoomAssignmentStatus
+									     where P_RoomID = @P_RoomID and IsDeleted = 0
+      update P_RoomAssignmentStatus
+      set ResidentCount = @GuestCount,
+	      IsFull = @IsFull,
+	      IsStaff = 0,
+	      Updateddate = getdate(),
+	      UpdatedBy = @UpdatedBy
+      where P_RoomAssignmentStatusID = @P_RoomAssignmentStatusID
+      if (@GuestCount = 0)
+      begin
+        update P_RoomAssignmentStatus
+        set NationalityID = null,
+            IsStaff = null,
+            ContractDetailsID = null
+        where P_RoomAssignmentStatusID = @P_RoomAssignmentStatusID
+      end 
+    end
+  end
+  else   -----prefabricated rooms
+  begin
+    select @GuestCount = isnull(count(GuestAssignmentID),0)from GuestAssignment
+                         where R_RoomID = @R_RoomID and ContractDetailsID = @ContractDetailsID and IsLeft = 0 and IsDeleted = 0
+    
+    select @IsFull = 0
+    if (@GuestPerRoom = @GuestCount)
+    begin
+      select @IsFull = 1
+    end
+    if not exists(select R_RoomAssignmentStatusID from R_RoomAssignmentStatus where R_RoomID = @R_RoomID and IsDeleted = 0)
+    begin
+      select @GuestID = i.GuestID from inserted i
+      select @NationalityID = NationalityID from Guest
+                              where GuestID = @GuestID
+      insert R_RoomAssignmentStatus(R_RoomID,ContractDetailsID,NationalityID,ResidentCount,IsFull,IsStaff,CreatedDate,Updateddate,CreatedBy,UpdatedBy,IsDeleted)
+	    					 values(@R_RoomID,@ContractDetailsID,@NationalityID,1,@IsFull,0,getdate(),getdate(),@CreatedBy,@UpdatedBy,0)
+    end
+    else
+    begin
+      declare @R_RoomAssignmentStatusID int
+      select @R_RoomAssignmentStatusID = R_RoomAssignmentStatusID from R_RoomAssignmentStatus
+									     where R_RoomID = @R_RoomID and IsDeleted = 0
+      update R_RoomAssignmentStatus
+      set ResidentCount = @GuestCount,
+	      IsFull = @IsFull,
+	      IsStaff = 0,
+	      Updateddate = getdate(),
+	      UpdatedBy = @UpdatedBy
+      where R_RoomAssignmentStatusID = @R_RoomAssignmentStatusID
+      if (@GuestCount = 0)
+      begin
+        update R_RoomAssignmentStatus
+        set NationalityID = null,
+            IsStaff = null,
+            ContractDetailsID = null
+        where R_RoomAssignmentStatusID = @R_RoomAssignmentStatusID
+      end 
+    end
+  end
+fetch next from AssignCursor into @ContractDetailsID,@P_RoomID,@R_RoomID,@CreatedBy,@UpdatedBy   
+end
+close AssignCursor
+deallocate AssignCursor
+
+if @@error <>0
+begin
+rollback tran 
+return
+end
+else
+begin
+commit tran
+end
