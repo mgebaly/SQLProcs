@@ -1,2 +1,0 @@
-# SQLProcs
-my stored procedures
