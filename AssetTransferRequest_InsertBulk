@@ -1,0 +1,53 @@
+USE [AMS]
+GO
+/****** Object:  StoredProcedure [dbo].[AssetTransferRequest_InsertBulk]    Script Date: 3/12/2015 12:59:58 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER proc [dbo].[AssetTransferRequest_InsertBulk]
+            @FromCompound int,
+            @ToCompound int,
+            @RequestDate datetime,
+            @TransferDetailXML nvarchar(max),
+            @UserID int
+as
+begin tran
+declare @TransferRequestID int
+insert AssetTransferRequest(FromCompound,ToCompound,RequestDate,StatusID,CreatedDate,Updateddate,CreatedBy,UpdatedBy,IsDeleted)
+                     values(@FromCompound,@ToCompound,@RequestDate,1,getdate(),getdate(),@UserID,@UserID,0)
+select @TransferRequestID = SCOPE_IDENTITY()
+declare @AssetTransferDetail table(AssetAssignmentPID int,
+                                   AssetAssignmentRID int,
+                                   AssetDeliveryID int,
+                                   Quantity int,
+                                   TagNoStart nvarchar(50),
+                                   TagNoEnd nvarchar(50))
+DECLARE @intDocHandle int
+EXEC sp_xml_preparedocument @intDocHandle OUTPUT, @TransferDetailXML
+insert @AssetTransferDetail(AssetAssignmentPID,AssetAssignmentRID,AssetDeliveryID,Quantity,TagNoStart,TagNoEnd)
+select * from OPENXML(@intDocHandle,'/DocumentElement/AssetTransferDetail', 2)
+with(AssetAssignmentPID int,
+     AssetAssignmentRID int,
+     AssetDeliveryID int,
+     Quantity int,
+     TagNoStart nvarchar(50),
+     TagNoEnd nvarchar(50))
+EXEC sp_xml_removedocument @intDocHandle
+
+insert AssetTransferDetail(TransferRequestID,AssetAssignmentPID,AssetAssignmentRID,AssetDeliveryID,Quantity,
+                           TagNoStart,TagNoEnd,ConfirmSend,ConfirmReceive,CreatedDate,Updateddate,CreatedBy,UpdatedBy,IsDeleted)
+                    select @TransferRequestID,AssetAssignmentPID,AssetAssignmentRID,AssetDeliveryID,Quantity,
+                           TagNoStart,TagNoEnd,0,0,getdate(),getdate(),@UserID,@UserID,0
+                    from @AssetTransferDetail      
+
+
+if @@error <>0
+begin
+rollback tran 
+return
+end
+else
+begin
+commit tran
+end
