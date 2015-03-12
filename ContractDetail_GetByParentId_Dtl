@@ -1,0 +1,16 @@
+USE [AMS]
+GO
+/****** Object:  StoredProcedure [dbo].[ContractDetail_GetByParentId_Dtl]    Script Date: 3/12/2015 1:04:14 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER proc [dbo].[ContractDetail_GetByParentId_Dtl]
+            @ContractID int
+as
+select ContractDetailsID,ContractID,'Group '+ cast(row_number() over(order by StartDate) as varchar(50)) 'Group',NumberofGuest,
+StartDate,ContractDetailsTerm,EndDate,cd.RoomTypeID,RoomsToAssign,rt.NameEn RoomTypeEn,rt.NameAr RoomTypeAr,GuestPerRoom
+from ContractDetail cd join RoomType rt
+on cd.RoomTypeID = rt.RoomTypeID 
+where ContractID = @ContractID and cd.IsDeleted = 0
+order by StartDate
