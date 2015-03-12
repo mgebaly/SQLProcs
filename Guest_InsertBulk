@@ -1,0 +1,100 @@
+USE [AMS]
+GO
+/****** Object:  StoredProcedure [dbo].[Guest_InsertBulk]    Script Date: 3/12/2015 12:55:34 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER proc [dbo].[Guest_InsertBulk]
+            @ClientID int,
+            @CompoundID int,
+            @GuestXML nvarchar(max),
+            @UserID int,
+            @GuestIdXML xml output
+as
+begin tran
+declare @Guest table(Name nvarchar(100),
+                     DOB datetime,
+                     NationalityID int,
+                     ReligionID int,
+                     RegID nvarchar(50),
+                     IqamaNo nvarchar(50),
+                     PassportNo nvarchar(50),
+                     MobileNo nvarchar(50))
+DECLARE @intDocHandle int
+EXEC sp_xml_preparedocument @intDocHandle OUTPUT, @GuestXML
+insert @Guest(Name,DOB,NationalityID,ReligionID,RegID,IqamaNo,PassportNo,MobileNo)
+select * from OPENXML(@intDocHandle,'/DocumentElement/Guest', 2)
+with(Name nvarchar(100),
+     DOB datetime,
+     NationalityID int,
+     ReligionID int,
+     RegID nvarchar(50),
+     IqamaNo nvarchar(50),
+     PassportNo nvarchar(50),
+     MobileNo nvarchar(50))
+EXEC sp_xml_removedocument @intDocHandle
+
+declare @Name nvarchar(100)
+declare @RegID nvarchar(50)
+declare @IqamaNo nvarchar(50)
+declare @PassportNo nvarchar(50)
+declare GuestCursor cursor for select Name,RegID,IqamaNo,PassportNo from @Guest
+open GuestCursor
+fetch next from GuestCursor into @Name,@RegID,@IqamaNo,@PassportNo
+while @@FETCH_STATUS = 0 
+begin
+  if exists(select GuestID from Guest where Name = @Name and ClientID = @ClientID and CompoundID = @CompoundID and IsDeleted = 0)
+  begin
+    RAISERROR ('ERROR: Guest with same Name already exists.',17,1)
+    rollback tran 
+    return
+  end
+  if @RegID is not null
+  begin
+    if exists(select GuestID from Guest where RegID = @RegID and ClientID = @ClientID and CompoundID = @CompoundID and IsDeleted = 0)
+    begin
+      RAISERROR ('ERROR: Guest with same Registration ID already exists.',17,1)
+      rollback tran 
+      return
+    end  
+  end
+  if @IqamaNo is not null
+  begin
+    if exists(select GuestID from Guest where IqamaNo = @IqamaNo and ClientID = @ClientID and CompoundID = @CompoundID and IsDeleted = 0)
+    begin
+      RAISERROR ('ERROR: Guest with same Iqama Number already exists.',17,1)
+      rollback tran 
+    return
+    end
+  end
+  if @PassportNo is not null
+  begin
+    if exists(select GuestID from Guest where PassportNo = @PassportNo and ClientID = @ClientID and CompoundID = @CompoundID and IsDeleted = 0)
+    begin
+      RAISERROR ('ERROR: Guest with same Passport Number already exists.',17,1)
+      rollback tran 
+      return
+    end
+  end
+fetch next from GuestCursor into @Name,@RegID,@IqamaNo,@PassportNo 
+end
+close GuestCursor
+deallocate GuestCursor
+declare @GuestIDs table(GuestID int)
+insert Guest(ClientID,CompoundID,Name,Photo,DOB,NationalityID,ReligionID,RegID,IqamaNo,PassportNo,MobileNo,CreatedDate,Updateddate,CreatedBy,UpdatedBy,IsDeleted)
+       OUTPUT inserted.GuestID into @GuestIDs
+       select @ClientID,@CompoundID,Name,null,DOB,NationalityID,ReligionID,RegID,IqamaNo,PassportNo,MobileNo,getdate(),getdate(),@UserID,@UserID,0
+       from @Guest
+
+select @GuestIdXML = (select GuestID from @GuestIDs for xml PATH(''),TYPE)
+       
+if @@error <>0
+begin
+rollback tran 
+return
+end
+else
+begin
+commit tran
+end
