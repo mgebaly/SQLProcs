@@ -1,0 +1,29 @@
+USE [AccessLogs]
+GO
+/****** Object:  UserDefinedFunction [dbo].[UDF_GetWorkingHours]    Script Date: 3/12/2015 12:45:11 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER function [dbo].[UDF_GetWorkingHours]
+               (@UserId int,
+                @LogDate datetime)
+               returns int
+as
+begin
+declare @checkinTime datetime
+declare @checkoutTime datetime
+declare @workingHours int
+
+select @checkinTime = min(LogDate) from Logs
+where UserId = @UserId and 
+convert(varchar(10),LogDate,103) = convert(varchar(10),@LogDate,103)
+
+select @checkoutTime = max(LogDate) from Logs
+where UserId = @UserId and 
+convert(varchar(10),LogDate,103) = convert(varchar(10),@LogDate,103)
+
+select @workingHours = isnull(datediff(hh,@checkinTime,@checkoutTime),0)
+return @workingHours
+end
+
