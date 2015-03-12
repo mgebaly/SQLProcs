@@ -1,0 +1,94 @@
+USE [REDFS]
+GO
+/****** Object:  StoredProcedure [dbo].[CashFlowsPreopeningExpenses_Schedule]    Script Date: 3/12/2015 1:26:33 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER proc [dbo].[CashFlowsPreopeningExpenses_Schedule]
+            @PlanningScenarioId int
+as
+begin tran
+
+declare @ConstructionStartDate datetime,@ConstructionEndDate datetime,@OperatingStartDate datetime,@OperatingEndDate datetime
+declare @StartYear int,@EndYear int
+declare @ScenarioYears table([Year] int)
+
+select @ConstructionStartDate = ConstructionStartDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+select @ConstructionEndDate = ConstructionEndDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+select @OperatingStartDate = OperatingStartDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+select @OperatingEndDate = OperatingEndDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+
+select @StartYear = year(@ConstructionStartDate)
+select @EndYear = year(@OperatingEndDate)
+
+;with CTE_ScenarioYears
+as
+(
+  select @StartYear ScenarioDate
+  union all
+  select ScenarioDate + 1
+  from CTE_ScenarioYears
+  where ScenarioDate + 1 <= @EndYear
+)
+insert @ScenarioYears select ScenarioDate [Year] from CTE_ScenarioYears
+option (maxrecursion 0)
+
+;with CTE_POE as
+(
+select CashFlowsPreopeningExpensesId,PlanningScenarioId,[Definition],year(DateRecorded)[Year],Studies,'Studies Costs' GroupDef,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsPreopeningExpenses
+where PlanningScenarioId = @PlanningScenarioId and Studies <> 0 and IsDeleted = 0
+union
+select CashFlowsPreopeningExpensesId,PlanningScenarioId,[Definition],year(DateRecorded)[Year],GovUtilitiesFees,'Government & Utilities Fees',
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsPreopeningExpenses
+where PlanningScenarioId = @PlanningScenarioId and GovUtilitiesFees <> 0 and IsDeleted = 0
+union
+select CashFlowsPreopeningExpensesId,PlanningScenarioId,[Definition],year(DateRecorded)[Year],ProfessionalFees,'Professional Fees',
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsPreopeningExpenses
+where PlanningScenarioId = @PlanningScenarioId and ProfessionalFees <> 0 and IsDeleted = 0
+union
+select CashFlowsPreopeningExpensesId,PlanningScenarioId,[Definition],year(DateRecorded)[Year],InsuranceCost,'Insurance Fees',
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsPreopeningExpenses
+where PlanningScenarioId = @PlanningScenarioId and InsuranceCost <> 0 and IsDeleted = 0
+)
+
+select * from CTE_POE
+union
+select null,null,null,y.[Year],null,null,
+case 
+when y.[Year] between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when y.[Year] between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+end Years
+from @ScenarioYears y
+where y.[Year] not in(select [Year] from CTE_POE)
+
+if @@error <>0
+begin
+rollback tran 
+return
+end
+else
+begin
+commit tran
+end
