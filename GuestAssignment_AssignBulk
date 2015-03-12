@@ -1,0 +1,40 @@
+USE [AMS]
+GO
+/****** Object:  StoredProcedure [dbo].[GuestAssignment_AssignBulk]    Script Date: 3/12/2015 12:57:42 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER proc [dbo].[GuestAssignment_AssignBulk]
+            @ContractDetailsID int,
+            @CheckInDate datetime,
+            @AssignBulkXML nvarchar(max),
+            @UserID int
+as
+begin tran 
+
+declare @GuestAssignment table(GuestID int,
+                               P_RoomID int,
+                               R_RoomID int)
+DECLARE @intDocHandle int
+EXEC sp_xml_preparedocument @intDocHandle OUTPUT, @AssignBulkXML
+insert @GuestAssignment(GuestID,P_RoomID,R_RoomID)
+select * from OPENXML(@intDocHandle,'/DocumentElement/GuestAssignment', 2)
+with(GuestID int,
+     P_RoomID int,
+     R_RoomID int)
+EXEC sp_xml_removedocument @intDocHandle
+
+insert GuestAssignment(ContractDetailsID,GuestID,P_RoomID,R_RoomID,CheckInDate,IsLeft,LeaveDate,LeaveTypeID,Notes,CreatedDate,Updateddate,CreatedBy,UpdatedBy,IsDeleted)
+                select @ContractDetailsID,GuestID,P_RoomID,R_RoomID,@CheckInDate,0,null,null,null,getdate(),getdate(),@UserID,@UserID,0
+                from @GuestAssignment
+
+if @@error <>0
+begin
+rollback tran 
+return
+end
+else
+begin
+commit tran
+end
