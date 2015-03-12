@@ -1,0 +1,26 @@
+USE [REDFS]
+GO
+/****** Object:  UserDefinedFunction [dbo].[UDF_GetScenarioPeriod]    Script Date: 3/12/2015 1:11:45 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER function [dbo].[UDF_GetScenarioPeriod]
+                (@PlanningScenarioId int,
+				 @Year int)
+				 returns nvarchar(50)
+as
+begin
+declare @ScenarioPeriod nvarchar(50)
+select @ScenarioPeriod = case
+when @Year between year(PlanningStartDate) and year(PlanningEndDate) then 'Planning'
+when (@Year between year(ConstructionStartDate) and year(ConstructionEndDate))
+     and (@Year between year(MarketingandSalesStartDate) and year(ConstructionEndDate)) then 'Construction In Progress & Marketing'
+when @Year between year(ConstructionStartDate) and year(ConstructionEndDate) then 'Construction'
+when @Year between year(MarketingandSalesStartDate) and year(MarketingandSalesEndDate) then 'Marketing & Sales'
+else 'Outside Feasibility Scope'
+end
+from PlanningScenario
+where PlanningScenarioId = @PlanningScenarioId
+return @ScenarioPeriod
+end
