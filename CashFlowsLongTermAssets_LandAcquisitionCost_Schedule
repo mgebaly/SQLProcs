@@ -1,0 +1,85 @@
+USE [REDFS]
+GO
+/****** Object:  StoredProcedure [dbo].[CashFlowsLongTermAssets_LandAcquisitionCost_Schedule]    Script Date: 3/12/2015 1:23:01 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER proc [dbo].[CashFlowsLongTermAssets_LandAcquisitionCost_Schedule]
+            @PlanningScenarioId int
+as
+begin tran
+
+declare @ConstructionStartDate datetime,@ConstructionEndDate datetime,@OperatingStartDate datetime,@OperatingEndDate datetime
+declare @StartYear int,@EndYear int
+declare @ScenarioYears table([Year] int)
+
+select @ConstructionStartDate = ConstructionStartDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+select @ConstructionEndDate = ConstructionEndDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+select @OperatingStartDate = OperatingStartDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+select @OperatingEndDate = OperatingEndDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+
+select @StartYear = year(@ConstructionStartDate)
+select @EndYear = year(@OperatingEndDate)
+
+;with CTE_ScenarioYears
+as
+(
+  select @StartYear ScenarioDate
+  union all
+  select ScenarioDate + 1
+  from CTE_ScenarioYears
+  where ScenarioDate + 1 <= @EndYear
+)
+insert @ScenarioYears select ScenarioDate [Year] from CTE_ScenarioYears
+option (maxrecursion 0)
+
+;with CTE_LTA as
+(
+select CashFlowsLongTermAssetsId,PlanningScenarioId,[Definition],year(DateRecorded) [Year],LandAcquisitionCostLeased,'Land Acquisition Leased' GroupDef,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsLongTermAssets
+where PlanningScenarioId = @PlanningScenarioId and LandAcquisitionCostLeased <> 0 and IsDeleted = 0
+union
+select CashFlowsLongTermAssetsId,PlanningScenarioId,[Definition],year(DateRecorded) [Year],LongTermReceivables,'Long Term Receivables' GroupDef,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsLongTermAssets
+where PlanningScenarioId = @PlanningScenarioId and LongTermReceivables <> 0 and IsDeleted = 0
+union
+select CashFlowsLongTermAssetsId,PlanningScenarioId,[Definition],year(DateRecorded) [Year],LandAcquisitionCostPurchased,'Land Acquisition Purchased' GroupDef,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsLongTermAssets
+where PlanningScenarioId = @PlanningScenarioId and LandAcquisitionCostPurchased <> 0 and IsDeleted = 0
+)
+
+select * from CTE_LTA
+union
+select null,null,null,y.[Year],null,null,
+case 
+when y.[Year] between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when y.[Year] between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+end Years
+from @ScenarioYears y
+where y.[Year] not in(select [Year] from CTE_LTA)
+
+if @@error <>0
+begin
+rollback tran 
+return
+end
+else
+begin
+commit tran
+end
