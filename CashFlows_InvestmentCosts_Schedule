@@ -1,0 +1,159 @@
+USE [REDFS]
+GO
+/****** Object:  StoredProcedure [dbo].[CashFlows_InvestmentCosts_Schedule]    Script Date: 3/12/2015 1:14:56 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER proc [dbo].[CashFlows_InvestmentCosts_Schedule]
+            @PlanningScenarioId int
+as
+begin tran
+
+declare @ConstructionStartDate datetime,@ConstructionEndDate datetime,@OperatingStartDate datetime,@OperatingEndDate datetime
+declare @StartYear int,@EndYear int
+declare @ScenarioYears table([Year] int)
+
+select @ConstructionStartDate = ConstructionStartDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+select @ConstructionEndDate = ConstructionEndDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+select @OperatingStartDate = OperatingStartDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+select @OperatingEndDate = OperatingEndDate from PlanningScenario where PlanningScenarioId = @PlanningScenarioId
+
+select @StartYear = year(@ConstructionStartDate)
+select @EndYear = year(@OperatingEndDate)
+
+;with CTE_ScenarioYears
+as
+(
+  select @StartYear ScenarioDate
+  union all
+  select ScenarioDate + 1
+  from CTE_ScenarioYears
+  where ScenarioDate + 1 <= @EndYear
+)
+insert @ScenarioYears select ScenarioDate [Year] from CTE_ScenarioYears
+option (maxrecursion 0)
+
+;with CTE_Total as
+(
+select 1 'i',PlanningScenarioId,year(DateRecorded) [Year],sum(Studies)Cost,'Studies' GroupDef,'Soft Costs' Section,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsPreopeningExpenses
+where PlanningScenarioId = @PlanningScenarioId and Studies <> 0 and IsDeleted = 0
+group by PlanningScenarioId,year(DateRecorded)
+union
+select 1,PlanningScenarioId,year(DateRecorded) [Year],sum(GovUtilitiesFees)Cost,'Gov. Utilities Fees' GroupDef,'Soft Costs' Section,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsPreopeningExpenses
+where PlanningScenarioId = @PlanningScenarioId and GovUtilitiesFees <> 0 and IsDeleted = 0
+group by PlanningScenarioId,year(DateRecorded)
+union
+select 1,PlanningScenarioId,year(DateRecorded) [Year],sum(ProfessionalFees)Cost,'Professional Fees' GroupDef,'Soft Costs' Section,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsPreopeningExpenses
+where PlanningScenarioId = @PlanningScenarioId and ProfessionalFees <> 0 and IsDeleted = 0
+group by PlanningScenarioId,year(DateRecorded)
+union
+select 1,PlanningScenarioId,year(DateRecorded) [Year],sum(InsuranceCost)Cost,'Insurance Cost' GroupDef,'Soft Costs' Section,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsPreopeningExpenses
+where PlanningScenarioId = @PlanningScenarioId and InsuranceCost <> 0 and IsDeleted = 0
+group by PlanningScenarioId,year(DateRecorded)
+union
+select 2,PlanningScenarioId,year(DateRecorded) [Year],sum(LandAcquisitionCostLeased)Cost,'land Acquisition Cost Leased' GroupDef,'Hard Costs' Section,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsLongTermAssets
+where PlanningScenarioId = @PlanningScenarioId and LandAcquisitionCostLeased <> 0 and IsDeleted = 0
+group by PlanningScenarioId,year(DateRecorded)
+union
+select 2,PlanningScenarioId,year(DateRecorded) [Year],sum(LandAcquisitionCostPurchased)Cost,'land Acquisition Cost Purchased' GroupDef,'Hard Costs' Section,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsLongTermAssets
+where PlanningScenarioId = @PlanningScenarioId and LandAcquisitionCostPurchased <> 0 and IsDeleted = 0
+group by PlanningScenarioId,year(DateRecorded)
+union
+select 2,PlanningScenarioId,year(DateRecorded) [Year],sum(LongTermReceivables)Cost,'Long Term Receivables' GroupDef,'Hard Costs' Section,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsLongTermAssets
+where PlanningScenarioId = @PlanningScenarioId and LongTermReceivables <> 0 and IsDeleted = 0
+group by PlanningScenarioId,year(DateRecorded)
+union
+select 2,PlanningScenarioId,year(DateRecorded) [Year],sum(DevelopmentCosts)Cost,'Development Costs' GroupDef,'Hard Costs' Section,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsLongTermAssets
+where PlanningScenarioId = @PlanningScenarioId and DevelopmentCosts <> 0 and IsDeleted = 0
+group by PlanningScenarioId,year(DateRecorded)
+union
+select 2,PlanningScenarioId,year(DateRecorded) [Year],sum(ConstructionCosts)Cost,'Construction Costs' GroupDef,'Hard Costs' Section,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsLongTermAssets
+where PlanningScenarioId = @PlanningScenarioId and ConstructionCosts <> 0 and IsDeleted = 0
+group by PlanningScenarioId,year(DateRecorded)
+union
+select 3,PlanningScenarioId,year(DateRecorded) [Year],sum(Contingency)Cost,'Contingency Costs' GroupDef,'Contingencies' Section,
+case
+when year(DateRecorded) between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when year(DateRecorded) between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+else 'Outside Feasibility Scope'
+end Years
+from CashFlowsContingencies
+where PlanningScenarioId = @PlanningScenarioId and Contingency <> 0 and IsDeleted = 0
+group by PlanningScenarioId,year(DateRecorded)
+)
+
+select * from CTE_Total
+union
+select 0,null,y.[Year],null,null,null,
+case 
+when y.[Year] between year(@ConstructionStartDate) and year(@ConstructionEndDate) then 'Construction Years'
+when y.[Year] between year(@OperatingStartDate) and year(@OperatingEndDate) then 'Operating Years'
+end Years
+from @ScenarioYears y
+where y.[Year] not in(select [Year] from CTE_Total)
+
+
+if @@error <>0
+begin
+rollback tran 
+return
+end
+else
+begin
+commit tran
+end
